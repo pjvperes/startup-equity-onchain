@@ -19,7 +19,6 @@ contract EquityToken is ERC20Burnable {
         founder = tx.origin;
     }
 
-
     function addPartner(address _partner, uint _tokensAmount, uint _cliffPeriod, uint _vestingPeriod) external {
         if (partners.length == 0) {
             require(msg.sender == founder, "Only the founder can add the first partner.");
