@@ -108,4 +108,13 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         partners.push(msg.sender);
         emit EquityPurchased(msg.sender, offerDetails.tokensAmount);
     }
+
+    function cancelSellEquity() external {
+        SellEquityDetails storage offerDetails = sellEquityDetails[msg.sender];
+        require(offerDetails.active, "No active sell offer");
+        
+        _transfer(address(this), msg.sender, offerDetails.tokensAmount);
+        
+        offerDetails.active = false;
+    }
 }
