@@ -84,4 +84,13 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
 
         return tokensToClaim;
     }
+
+    function sellEquity(uint _tokensAmount, uint _price) external nonReentrant {
+        require(_tokensAmount > 0, "Invalid token amount");
+        require(_price > 0, "Invalid price");
+        require(balanceOf(msg.sender) >= _tokensAmount, "Insufficient balance");
+
+        _transfer(msg.sender, address(this), _tokensAmount);
+        sellEquityDetails[msg.sender] = SellEquityDetails(msg.sender, _tokensAmount, _price, address(0), false);
+    }
 }
