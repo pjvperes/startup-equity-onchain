@@ -93,4 +93,19 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         _transfer(msg.sender, address(this), _tokensAmount);
         sellEquityDetails[msg.sender] = SellEquityDetails(msg.sender, _tokensAmount, _price, address(0), false);
     }
+
+    function buyEquity(address _seller) external nonReentrant {
+        SellEquityDetails storage offerDetails = sellEquityDetails[_seller];
+        require(offerDetails.active == true, "Invalid token amount");
+
+        uint equivalentUsdcAmount = offerDetails.tokensAmount * offerDetails.price * 100;
+
+        require(usdcToken.transferFrom(msg.sender, offerDetails.seller, equivalentUsdcAmount), "USDC transfer failed");
+        transfer(msg.sender, offerDetails.tokensAmount);
+
+        offerDetails.buyer = msg.sender;
+        offerDetails.active = false;
+        partners.push(msg.sender);
+        emit EquityPurchased(msg.sender, offerDetails.tokensAmount);
+    }
 }
