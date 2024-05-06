@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract EquityToken is ERC20Burnable {
-
-    function decimals() public view virtual override returns (uint8) {
-        return 2;
-    }
+contract EquityToken is ERC20Burnable, ReentrancyGuard {
+    IERC20 public usdcToken;
+    event EquityPurchased(address indexed buyer, uint tokensAmount);
 
     address[] public partners;
     address public founder;
     mapping(address => PartnerDetails) public partnersDetails;
+    mapping(address => SellEquityDetails) public sellEquityDetails;
 
     struct PartnerDetails {
         uint partnershipStartDate;
@@ -21,8 +22,21 @@ contract EquityToken is ERC20Burnable {
         uint vestingPeriod;
     }
 
-    constructor(string memory _name, string memory _symbol) ERC20(_name, _symbol) {
-        founder = tx.origin;
+    struct SellEquityDetails {
+        address seller;
+        uint tokensAmount;
+        uint price;
+        address buyer;
+        bool active;
+    }
+
+    constructor(string memory _name, string memory _symbol, address _usdcToken) ERC20(_name, _symbol) {
+        founder = msg.sender;
+        usdcToken = IERC20(_usdcToken);
+    }
+
+    function decimals() public view virtual override returns (uint8) {
+        return 2;
     }
 
     function addPartner(address _partner, uint _totalTokensAmount, uint _cliffPeriod, uint _vestingPeriod) external {
@@ -34,7 +48,7 @@ contract EquityToken is ERC20Burnable {
         require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
 
         partners.push(_partner);
-        partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, _cliffPeriod, _vestingPeriod);
+        partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
 
         if (_cliffPeriod == 0 && _vestingPeriod == 0) {
             _mint(_partner, _totalTokensAmount);
@@ -69,5 +83,38 @@ contract EquityToken is ERC20Burnable {
         }
 
         return tokensToClaim;
+    }
+
+    function sellEquity(uint _tokensAmount, uint _price) external nonReentrant {
+        require(_tokensAmount > 0, "Invalid token amount");
+        require(_price > 0, "Invalid price");
+        require(balanceOf(msg.sender) >= _tokensAmount, "Insufficient balance");
+
+        _transfer(msg.sender, address(this), _tokensAmount);
+        sellEquityDetails[msg.sender] = SellEquityDetails(msg.sender, _tokensAmount, _price, address(0), false);
+    }
+
+    function buyEquity(address _seller) external nonReentrant {
+        SellEquityDetails storage offerDetails = sellEquityDetails[_seller];
+        require(offerDetails.active == true, "Invalid token amount");
+
+        uint equivalentUsdcAmount = offerDetails.tokensAmount * offerDetails.price * 100;
+
+        require(usdcToken.transferFrom(msg.sender, offerDetails.seller, equivalentUsdcAmount), "USDC transfer failed");
+        transfer(msg.sender, offerDetails.tokensAmount);
+
+        offerDetails.buyer = msg.sender;
+        offerDetails.active = false;
+        partners.push(msg.sender);
+        emit EquityPurchased(msg.sender, offerDetails.tokensAmount);
+    }
+
+    function cancelSellEquity() external {
+        SellEquityDetails storage offerDetails = sellEquityDetails[msg.sender];
+        require(offerDetails.active, "No active sell offer");
+        
+        _transfer(address(this), msg.sender, offerDetails.tokensAmount);
+        
+        offerDetails.active = false;
     }
 }
