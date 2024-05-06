@@ -117,4 +117,19 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         
         offerDetails.active = false;
     }
+
+    function dismissPartner(address _partner) external {
+        PartnerDetails storage partnerDetails = partnersDetails[_partner];
+        require(partnerDetails.claimedTokensAmount == 0, "Partner has already claimed tokens");
+        require(block.timestamp < partnerDetails.partnershipStartDate + partnerDetails.cliffPeriod, "Partner is not in cliff period");
+
+        delete partnersDetails[_partner];
+        for (uint i = 0; i < partners.length; i++) {
+            if (partners[i] == _partner) {
+                partners[i] = partners[partners.length - 1];
+                partners.pop();
+                break;
+            }
+        }
+    }
 }
