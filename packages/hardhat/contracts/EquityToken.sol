@@ -8,11 +8,15 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 contract EquityToken is ERC20Burnable, ReentrancyGuard {
     IERC20 public usdcToken;
     event EquityPurchased(address indexed buyer, uint tokensAmount);
+    event DismissProposalCreated(uint proposalId, address proposalTarget);
+    event VoteCast(uint proposalId, address voter);
 
     address[] public partners;
     address public founder;
     mapping(address => PartnerDetails) public partnersDetails;
     mapping(address => SellEquityDetails) public sellEquityDetails;
+    mapping(uint => DismissProposal) public dismissProposals;
+    uint public nextProposalId;
 
     struct PartnerDetails {
         uint partnershipStartDate;
@@ -28,6 +32,13 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         uint price;
         address buyer;
         bool active;
+    }
+
+    struct DismissProposal {
+        address proposalTarget;
+        bool executed;
+        address[] partnersFor;
+        mapping(address => bool) hasVoted;
     }
 
     constructor(string memory _name, string memory _symbol, address _usdcToken) ERC20(_name, _symbol) {
@@ -118,14 +129,53 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         offerDetails.active = false;
     }
 
-    function dismissPartner(address _partner) external {
-        PartnerDetails storage partnerDetails = partnersDetails[_partner];
+    function createDismissProposal (address _partner) public {
+        require(msg.sender == founder || balanceOf(msg.sender) > 0, "Only partners or the founder can create proposals");
+        require(_partner != address(0), "Invalid partner address");
+
+        DismissProposal storage proposal = dismissProposals[nextProposalId];
+        proposal.proposalTarget = _partner;
+        proposal.executed = false;
+
+        emit DismissProposalCreated(nextProposalId, _partner);
+        nextProposalId++;
+    }
+
+    function voteDismissProposal (uint _id) public {
+        require(msg.sender == founder || balanceOf(msg.sender) > 0, "Only partners or the founder can vote");
+        require(_id < nextProposalId, "Proposal ID does not exist");
+        DismissProposal storage proposal = dismissProposals[_id];
+        require(!proposal.executed, "Proposal already executed");
+        require(!proposal.hasVoted[msg.sender], "You have already voted on this proposal");
+
+         proposal.hasVoted[msg.sender] = true;
+         proposal.partnersFor.push(msg.sender);
+
+        emit VoteCast(_id, msg.sender);
+
+    // Calculating total tokens voted for the proposal
+    uint totalVotesFor = 0;
+    for (uint i = 0; i < proposal.partnersFor.length; i++) {
+        address voter = proposal.partnersFor[i];
+        totalVotesFor += balanceOf(voter);
+    }
+
+    // Checking if the total votes for are more than 50% of the total token supply
+    if (totalVotesFor > totalSupply() / 2) {
+        dismissPartner(_id);  // Call the function to execute dismissal
+    }
+    }
+
+    function dismissPartner(uint _id) internal {
+        DismissProposal storage proposal = dismissProposals[_id];
+        PartnerDetails storage partnerDetails = partnersDetails[proposal.proposalTarget];
+
         require(partnerDetails.claimedTokensAmount == 0, "Partner has already claimed tokens");
         require(block.timestamp < partnerDetails.partnershipStartDate + partnerDetails.cliffPeriod, "Partner is not in cliff period");
 
-        delete partnersDetails[_partner];
+        delete partnersDetails[proposal.proposalTarget];
         for (uint i = 0; i < partners.length; i++) {
-            if (partners[i] == _partner) {
+            if (partners[i] == proposal.proposalTarget) {
                 partners[i] = partners[partners.length - 1];
                 partners.pop();
                 break;
