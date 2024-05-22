@@ -148,22 +148,23 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         require(!proposal.executed, "Proposal already executed");
         require(!proposal.hasVoted[msg.sender], "You have already voted on this proposal");
 
-         proposal.hasVoted[msg.sender] = true;
-         proposal.partnersFor.push(msg.sender);
+        proposal.hasVoted[msg.sender] = true;
+        proposal.partnersFor.push(msg.sender);
+
+        // Calculating total tokens voted for the proposal
+        uint totalVotesFor = 0;
+        for (uint i = 0; i < proposal.partnersFor.length; i++) {
+            address voter = proposal.partnersFor[i];
+            totalVotesFor += balanceOf(voter);
+        }
+
+        // Checking if the total votes for are more than 50% of the total token supply
+        if (totalVotesFor > totalSupply() / 2) {
+            proposal.executed = true;  // Mark the proposal as executed before dismissal to prevent reentrancy
+            dismissPartner(_id);  // Call the function to execute dismissal
+        }
 
         emit VoteCast(_id, msg.sender);
-
-    // Calculating total tokens voted for the proposal
-    uint totalVotesFor = 0;
-    for (uint i = 0; i < proposal.partnersFor.length; i++) {
-        address voter = proposal.partnersFor[i];
-        totalVotesFor += balanceOf(voter);
-    }
-
-    // Checking if the total votes for are more than 50% of the total token supply
-    if (totalVotesFor > totalSupply() / 2) {
-        dismissPartner(_id);  // Call the function to execute dismissal
-    }
     }
 
     function dismissPartner(uint _id) internal {
