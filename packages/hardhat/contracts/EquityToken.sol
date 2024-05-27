@@ -17,6 +17,7 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
     mapping(address => SellEquityDetails) public sellEquityDetails;
     mapping(uint => DismissProposal) public dismissProposals;
     uint public nextProposalId;
+    address USDTAddress;
 
     struct PartnerDetails {
         uint partnershipStartDate;
@@ -41,9 +42,9 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         mapping(address => bool) hasVoted;
     }
 
-    constructor(string memory _name, string memory _symbol, address _usdcToken) ERC20(_name, _symbol) {
+    constructor(string memory _name, string memory _symbol) ERC20(_name, _symbol) {
         founder = msg.sender;
-        usdcToken = IERC20(_usdcToken);
+        usdcToken = IERC20(USDTAddress);
     }
 
     function decimals() public view virtual override returns (uint8) {
@@ -182,5 +183,9 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
                 break;
             }
         }
+    }
+
+    function getPartners() external view returns (address[] memory) {
+        return partners;
     }
 }
