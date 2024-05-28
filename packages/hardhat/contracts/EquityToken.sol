@@ -43,7 +43,7 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
     }
 
     constructor(string memory _name, string memory _symbol) ERC20(_name, _symbol) {
-        founder = msg.sender;
+        founder = tx.origin;
         usdcToken = IERC20(USDTAddress);
     }
 
@@ -54,16 +54,24 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
     function addPartner(address _partner, uint _totalTokensAmount, uint _cliffPeriod, uint _vestingPeriod) external {
         if (partners.length == 0) {
             require(msg.sender == founder, "Only the founder can add the first partner.");
-        }
-        require(_partner != address(0), "Invalid partner address");
-        require(_totalTokensAmount > 0, "Invalid tokens amount");
-        require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
 
-        partners.push(_partner);
-        partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
+            require(_partner != address(0), "Invalid partner address");
+            require(_totalTokensAmount > 0, "Invalid tokens amount");
+            require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
 
-        if (_cliffPeriod == 0 && _vestingPeriod == 0) {
-            _mint(_partner, _totalTokensAmount);
+            partners.push(_partner);
+            partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
+
+            if (_cliffPeriod == 0 && _vestingPeriod == 0) {
+                _mint(_partner, _totalTokensAmount);
+            }
+        } else {
+            partners.push(_partner);
+            partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
+                
+                if (_cliffPeriod == 0 && _vestingPeriod == 0) {
+                _mint(_partner, _totalTokensAmount);
+            }
         }
     }
 
