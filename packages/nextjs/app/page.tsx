@@ -17,7 +17,7 @@ const Home: NextPage = () => {
   const [companyAddress, setCompanyAddress] = useState<string | null>(null);
   const [searchId, setSearchId] = useState<number | null>(null);
 
-  const equityTokenFactoryAddress = "0x344fD6ebC3a87F5127965059a89887B6ca78f83f"; // Replace with your deployed contract address
+  const equityTokenFactoryAddress = "0xE5c4ab42a5A51C759af4F9610aac7B36B9b41fe6"; // Replace with your deployed contract address
   const equityTokenFactoryABI = EquityTokenFactoryJSON.abi;
 
   useEffect(() => {
