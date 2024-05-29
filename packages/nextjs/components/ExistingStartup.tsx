@@ -10,7 +10,7 @@ const ExistingStartup: React.FC = () => {
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [factoryContract, setFactoryContract] = useState<ethers.Contract | null>(null);
   const [equityTokenContract, setEquityTokenContract] = useState<ethers.Contract | null>(null);
-  const [factoryAddress] = useState<string>("0xE5c4ab42a5A51C759af4F9610aac7B36B9b41fe6");
+  const [factoryAddress] = useState<string>("0x46398e0aB12cd978b998D10E44592406a2a4EAC9");
   const [startupId, setStartupId] = useState<number | null>(null);
   const [equityTokenAddress, setEquityTokenAddress] = useState<string | null>(null);
   const [partners, setPartners] = useState<{ address: string; equity: number }[]>([]);
@@ -19,12 +19,18 @@ const ExistingStartup: React.FC = () => {
   const [sellTokensAmount, setSellTokensAmount] = useState<number>(0);
   const [sellPrice, setSellPrice] = useState<number>(0);
   const [proposalIdToVote, setProposalIdToVote] = useState<number | null>(null);
+  const [proposalTypeToVote, setProposalTypeToVote] = useState<string>("dismiss");
   const [message, setMessage] = useState<string>("");
   const [showModal, setShowModal] = useState<boolean>(true);
   const [startupName, setStartupName] = useState<string | null>(null);
   const [tokenSymbol, setTokenSymbol] = useState<string | null>(null);
   const [userTokens, setUserTokens] = useState<number>(0);
   const [totalSupply, setTotalSupply] = useState<number>(0);
+  const [newPartnerAddress, setNewPartnerAddress] = useState<string>("");
+  const [newPartnerTokens, setNewPartnerTokens] = useState<number>(0);
+  const [newPartnerCliff, setNewPartnerCliff] = useState<number>(0);
+  const [newPartnerVesting, setNewPartnerVesting] = useState<number>(0);
+  const [dismissPartnerAddress, setDismissPartnerAddress] = useState<string>("");
 
   useEffect(() => {
     const connectWallet = async () => {
@@ -122,8 +128,13 @@ const ExistingStartup: React.FC = () => {
       const proposalsList = [];
 
       for (let i = 0; i < nextProposalId; i++) {
-        const proposal = await equityTokenContract.dismissProposals(i);
-        proposalsList.push({ id: i, description: `Dismiss Proposal for: ${proposal.proposalTarget}` });
+        const dismissProposal = await equityTokenContract.dismissProposals(i);
+        const addProposal = await equityTokenContract.addProposals(i);
+        if (dismissProposal.proposalTarget !== ethers.constants.AddressZero) {
+          proposalsList.push({ id: i, description: `Dismiss Proposal for: ${dismissProposal.proposalTarget}` });
+        } else if (addProposal.proposalTarget !== ethers.constants.AddressZero) {
+          proposalsList.push({ id: i, description: `Add Proposal for: ${addProposal.proposalTarget}` });
+        }
       }
 
       setProposals(proposalsList);
@@ -174,7 +185,12 @@ const ExistingStartup: React.FC = () => {
       return;
     }
     try {
-      const tx = await equityTokenContract.voteDismissProposal(proposalIdToVote);
+      let tx;
+      if (proposalTypeToVote === "dismiss") {
+        tx = await equityTokenContract.voteDismissProposal(proposalIdToVote);
+      } else {
+        tx = await equityTokenContract.voteAddProposal(proposalIdToVote);
+      }
       await tx.wait();
       setMessage(`Vote cast for proposal ${proposalIdToVote} successfully`);
     } catch (error) {
@@ -203,6 +219,47 @@ const ExistingStartup: React.FC = () => {
         setMessage("Error creating equity offer: " + error.message);
       } else {
         setMessage("Error creating equity offer");
+      }
+    }
+  };
+
+  const createAddProposal = async () => {
+    if (!equityTokenContract) {
+      setMessage("Please connect to the contract first");
+      return;
+    }
+    try {
+      const tx = await equityTokenContract.createAddProposal(
+        newPartnerAddress,
+        ethers.utils.parseUnits(newPartnerTokens.toString(), 2),
+        newPartnerCliff,
+        newPartnerVesting,
+      );
+      await tx.wait();
+      setMessage("Add proposal created successfully");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage("Error creating add proposal: " + error.message);
+      } else {
+        setMessage("Error creating add proposal");
+      }
+    }
+  };
+
+  const createDismissProposal = async () => {
+    if (!equityTokenContract) {
+      setMessage("Please connect to the contract first");
+      return;
+    }
+    try {
+      const tx = await equityTokenContract.createDismissProposal(dismissPartnerAddress);
+      await tx.wait();
+      setMessage("Dismiss proposal created successfully");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage("Error creating dismiss proposal: " + error.message);
+      } else {
+        setMessage("Error creating dismiss proposal");
       }
     }
   };
@@ -303,6 +360,15 @@ const ExistingStartup: React.FC = () => {
                 </table>
                 <div className="mt-4">
                   <h3 className="font-bold text-lg mb-4">Vote for a Proposal</h3>
+                  <label className="block mb-2">Proposal Type</label>
+                  <select
+                    value={proposalTypeToVote}
+                    onChange={e => setProposalTypeToVote(e.target.value)}
+                    className="select select-bordered w-full mb-2"
+                  >
+                    <option value="dismiss">Dismiss Proposal</option>
+                    <option value="add">Add Proposal</option>
+                  </select>
                   <label className="block mb-2">Proposal ID</label>
                   <input
                     type="number"
@@ -313,6 +379,58 @@ const ExistingStartup: React.FC = () => {
                   />
                   <button onClick={voteForProposal} className="btn btn-primary w-full">
                     Vote
+                  </button>
+                </div>
+                <div className="mt-4">
+                  <h3 className="font-bold text-lg mb-4">Create Add Proposal</h3>
+                  <label className="block mb-2">New Partner Address</label>
+                  <input
+                    type="text"
+                    placeholder="Partner Address"
+                    value={newPartnerAddress}
+                    onChange={e => setNewPartnerAddress(e.target.value)}
+                    className="input input-bordered w-full mb-2"
+                  />
+                  <label className="block mb-2">Tokens Amount</label>
+                  <input
+                    type="number"
+                    placeholder="Tokens Amount"
+                    value={newPartnerTokens}
+                    onChange={e => setNewPartnerTokens(Number(e.target.value))}
+                    className="input input-bordered w-full mb-2"
+                  />
+                  <label className="block mb-2">Cliff Period (in seconds)</label>
+                  <input
+                    type="number"
+                    placeholder="Cliff Period"
+                    value={newPartnerCliff}
+                    onChange={e => setNewPartnerCliff(Number(e.target.value))}
+                    className="input input-bordered w-full mb-2"
+                  />
+                  <label className="block mb-2">Vesting Period (in seconds)</label>
+                  <input
+                    type="number"
+                    placeholder="Vesting Period"
+                    value={newPartnerVesting}
+                    onChange={e => setNewPartnerVesting(Number(e.target.value))}
+                    className="input input-bordered w-full mb-2"
+                  />
+                  <button onClick={createAddProposal} className="btn btn-primary w-full">
+                    Create Add Proposal
+                  </button>
+                </div>
+                <div className="mt-4">
+                  <h3 className="font-bold text-lg mb-4">Create Dismiss Proposal</h3>
+                  <label className="block mb-2">Partner Address to Dismiss</label>
+                  <input
+                    type="text"
+                    placeholder="Partner Address"
+                    value={dismissPartnerAddress}
+                    onChange={e => setDismissPartnerAddress(e.target.value)}
+                    className="input input-bordered w-full mb-2"
+                  />
+                  <button onClick={createDismissProposal} className="btn btn-primary w-full">
+                    Create Dismiss Proposal
                   </button>
                 </div>
               </div>

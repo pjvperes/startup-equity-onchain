@@ -63,22 +63,6 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         return 2;
     }
 
-    function addPartner(address _partner, uint _totalTokensAmount, uint _cliffPeriod, uint _vestingPeriod) external {
-        if (partners.length == 0) {
-            require(msg.sender == founder, "Only the founder can add the first partner.");
-        }
-        require(_partner != address(0), "Invalid partner address");
-        require(_totalTokensAmount > 0, "Invalid tokens amount");
-        require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
-
-        partners.push(_partner);
-        partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
-
-        if (_cliffPeriod == 0 && _vestingPeriod == 0) {
-            _mint(_partner, _totalTokensAmount);
-        }
-    }
-
     function claimEquity() external {
         PartnerDetails storage partnerDetails = partnersDetails[msg.sender];
         require(partnerDetails.totalTokensAmount > 0, "You are not a partner");
@@ -197,6 +181,35 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         }
     }
 
+    function addPartner(address _partner, uint _totalTokensAmount, uint _cliffPeriod, uint _vestingPeriod) public {
+        if (partners.length == 0) {
+            require(msg.sender == founder, "Only the founder can add the first partner.");
+            require(_partner != address(0), "Invalid partner address");
+            require(_totalTokensAmount > 0, "Invalid tokens amount");
+            require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
+    
+            partners.push(_partner);
+            partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
+    
+            if (_cliffPeriod == 0 && _vestingPeriod == 0) {
+                _mint(_partner, _totalTokensAmount);
+            }
+        } else {
+            require(msg.sender == address(this), "Only the contract can add more partners through proposals.");
+            require(_partner != address(0), "Invalid partner address");
+            require(_totalTokensAmount > 0, "Invalid tokens amount");
+            require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
+    
+            partners.push(_partner);
+            partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
+    
+            if (_cliffPeriod == 0 && _vestingPeriod == 0) {
+                _mint(_partner, _totalTokensAmount);
+            }
+        }
+    }
+
+
     function createAddProposal(address _partner, uint _tokensAmount, uint _cliffPeriod, uint _vestingPeriod) public {
         require(msg.sender == founder || balanceOf(msg.sender) > 0, "Only partners or the founder can create proposals");
         require(_partner != address(0), "Invalid partner address");
@@ -218,36 +231,27 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         AddProposal storage proposal = addProposals[_id];
         require(!proposal.executed, "Proposal already executed");
         require(!proposal.hasVoted[msg.sender], "You have already voted on this proposal");
-
+    
         proposal.hasVoted[msg.sender] = true;
         proposal.partnersFor.push(msg.sender);
-
+    
         // Calculating total tokens voted for the proposal
         uint totalVotesFor = 0;
         for (uint i = 0; i < proposal.partnersFor.length; i++) {
             address voter = proposal.partnersFor[i];
             totalVotesFor += balanceOf(voter);
         }
-
+    
         // Checking if the total votes for are more than 50% of the total token supply
         if (totalVotesFor > totalSupply() / 2) {
             proposal.executed = true;  // Mark the proposal as executed before addition to prevent reentrancy
-            addPartner(_id);  // Call the function to execute addition
+            // Call the function to execute addition
+            this.addPartner(proposal.proposalTarget, proposal.tokensAmount, proposal.cliffPeriod, proposal.vestingPeriod);
         }
-
+    
         emit VoteCast(_id, msg.sender);
     }
 
-    function addPartner(uint _id) internal {
-        AddProposal storage proposal = addProposals[_id];
-
-        partners.push(proposal.proposalTarget);
-        partnersDetails[proposal.proposalTarget] = PartnerDetails(block.timestamp, proposal.tokensAmount, 0, proposal.cliffPeriod, proposal.vestingPeriod);
-
-        if (proposal.cliffPeriod == 0 && proposal.vestingPeriod == 0) {
-            _mint(proposal.proposalTarget, proposal.tokensAmount);
-        }
-    }
 
     function getPartners() external view returns (address[] memory) {
         return partners;
