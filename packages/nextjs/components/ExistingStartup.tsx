@@ -10,7 +10,9 @@ const ExistingStartup: React.FC = () => {
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [factoryContract, setFactoryContract] = useState<ethers.Contract | null>(null);
   const [equityTokenContract, setEquityTokenContract] = useState<ethers.Contract | null>(null);
-  const [factoryAddress] = useState<string>("0x46398e0aB12cd978b998D10E44592406a2a4EAC9");
+  const [usdtContract, setUsdtContract] = useState<ethers.Contract | null>(null);
+  const [factoryAddress] = useState<string>("0x5fCE1B63c9A7a9d07D52a01b6260Ba390e3d84de");
+  const [usdtAddress] = useState<string>("0x6972577bCE333b688385f278E76F026bBF904D13");
   const [startupId, setStartupId] = useState<number | null>(null);
   const [equityTokenAddress, setEquityTokenAddress] = useState<string | null>(null);
   const [partners, setPartners] = useState<{ address: string; equity: number }[]>([]);
@@ -20,12 +22,14 @@ const ExistingStartup: React.FC = () => {
   const [sellPrice, setSellPrice] = useState<number>(0);
   const [proposalIdToVote, setProposalIdToVote] = useState<number | null>(null);
   const [proposalTypeToVote, setProposalTypeToVote] = useState<string>("dismiss");
+  const [buySellerAddress, setBuySellerAddress] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [showModal, setShowModal] = useState<boolean>(true);
   const [startupName, setStartupName] = useState<string | null>(null);
   const [tokenSymbol, setTokenSymbol] = useState<string | null>(null);
   const [userTokens, setUserTokens] = useState<number>(0);
   const [totalSupply, setTotalSupply] = useState<number>(0);
+  const [usdtBalance, setUsdtBalance] = useState<number>(0);
   const [newPartnerAddress, setNewPartnerAddress] = useState<string>("");
   const [newPartnerTokens, setNewPartnerTokens] = useState<number>(0);
   const [newPartnerCliff, setNewPartnerCliff] = useState<number>(0);
@@ -40,7 +44,13 @@ const ExistingStartup: React.FC = () => {
         setSigner(signer);
 
         const factoryContract = new ethers.Contract(factoryAddress, EquityTokenFactoryABI.abi, signer);
+        const usdtContract = new ethers.Contract(
+          usdtAddress,
+          ["function balanceOf(address) view returns (uint256)"],
+          signer,
+        );
         setFactoryContract(factoryContract);
+        setUsdtContract(usdtContract);
       } else {
         setMessage("Please install MetaMask");
       }
@@ -73,6 +83,7 @@ const ExistingStartup: React.FC = () => {
         await getPartners(equityTokenContract, decimals, totalSupply);
         await getEquityOffers(equityTokenContract, decimals);
         await getProposals(equityTokenContract);
+        await getUsdtBalance(equityTokenAddress);
 
         setShowModal(false);
       } catch (error) {
@@ -140,6 +151,15 @@ const ExistingStartup: React.FC = () => {
       setProposals(proposalsList);
     } catch (error) {
       console.error("Error retrieving proposals:", error);
+    }
+  };
+
+  const getUsdtBalance = async (equityTokenAddress: string) => {
+    try {
+      const balance = await usdtContract!.balanceOf(equityTokenAddress);
+      setUsdtBalance(Number(ethers.utils.formatUnits(balance, 6)));
+    } catch (error) {
+      console.error("Error retrieving USDT balance:", error);
     }
   };
 
@@ -264,6 +284,24 @@ const ExistingStartup: React.FC = () => {
     }
   };
 
+  const buyEquity = async () => {
+    if (!equityTokenContract) {
+      setMessage("Please connect to the contract first");
+      return;
+    }
+    try {
+      const tx = await equityTokenContract.buyEquity(buySellerAddress);
+      await tx.wait();
+      setMessage("Equity purchased successfully");
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage("Error purchasing equity: " + error.message);
+      } else {
+        setMessage("Error purchasing equity");
+      }
+    }
+  };
+
   return (
     <div className={styles.container}>
       <main className={styles.main}>
@@ -330,8 +368,11 @@ const ExistingStartup: React.FC = () => {
                 <div className="mb-2">
                   <span className="font-bold">Your Tokens:</span> {userTokens.toFixed(2)}
                 </div>
-                <div className="mb-4">
+                <div className="mb-2">
                   <span className="font-bold">Your Equity:</span> {((userTokens / totalSupply) * 100).toFixed(2)}%
+                </div>
+                <div className="mb-4">
+                  <span className="font-bold">USDT Balance in Contract:</span> {usdtBalance.toFixed(2)} USDT
                 </div>
                 <button onClick={claimEquity} className="btn btn-primary mb-2 w-full">
                   Claim Equity
@@ -474,6 +515,20 @@ const ExistingStartup: React.FC = () => {
                   />
                   <button onClick={sellEquity} className="btn btn-primary w-full">
                     Sell Equity
+                  </button>
+                </div>
+                <div className="mt-4">
+                  <h3 className="font-bold text-lg mb-4">Buy Equity</h3>
+                  <label className="block mb-2">Seller Address</label>
+                  <input
+                    type="text"
+                    placeholder="Seller Address"
+                    value={buySellerAddress}
+                    onChange={e => setBuySellerAddress(e.target.value)}
+                    className="input input-bordered w-full mb-2"
+                  />
+                  <button onClick={buyEquity} className="btn btn-primary w-full">
+                    Buy Equity
                   </button>
                 </div>
               </div>

@@ -18,6 +18,7 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
     mapping(address => SellEquityDetails) public sellEquityDetails;
     mapping(uint => DismissProposal) public dismissProposals;
     mapping(uint => AddProposal) public addProposals;
+    mapping(address => uint256) public withdrawnUSDT; // Novo mapeamento para rastrear o valor retirado por cada usuário
     uint public nextProposalId;
     address USDTAddress;
 
@@ -78,18 +79,23 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         if (partnerDetails.claimedTokensAmount == partnerDetails.totalTokensAmount) {
             return 0;
         }
-
+    
+        // Exige que vestingPeriod seja diferente de 0
+        if (partnerDetails.vestingPeriod == 0) {
+            return 0;
+        }
+    
         uint tokensToClaim = 0;
         uint vestingPeriod = partnerDetails.vestingPeriod;
         uint cliffPeriod = partnerDetails.cliffPeriod;
         uint totalTokensAmount = partnerDetails.totalTokensAmount;
         uint partnershipStartDate = partnerDetails.partnershipStartDate;
-
+    
         if (block.timestamp >= partnershipStartDate + cliffPeriod) {
             uint elapsedPeriods = ((block.timestamp - partnershipStartDate - cliffPeriod) * 10000) / vestingPeriod; //Razao entre o tempo decorrido e o tempo total para receber 100% do equity. Valor de 0 a 10.000 em que indica a % de tokens que você tem direito a receber
             tokensToClaim = totalTokensAmount * elapsedPeriods / 10000;
         }
-
+    
         return tokensToClaim;
     }
 
@@ -181,48 +187,25 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         }
     }
 
-    function addPartner(address _partner, uint _totalTokensAmount, uint _cliffPeriod, uint _vestingPeriod) public {
-        if (partners.length == 0) {
-            require(msg.sender == founder, "Only the founder can add the first partner.");
-            require(_partner != address(0), "Invalid partner address");
-            require(_totalTokensAmount > 0, "Invalid tokens amount");
-            require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
-    
-            partners.push(_partner);
-            partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
-    
-            if (_cliffPeriod == 0 && _vestingPeriod == 0) {
-                _mint(_partner, _totalTokensAmount);
-            }
-        } else {
-            require(msg.sender == address(this), "Only the contract can add more partners through proposals.");
-            require(_partner != address(0), "Invalid partner address");
-            require(_totalTokensAmount > 0, "Invalid tokens amount");
-            require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
-    
-            partners.push(_partner);
-            partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
-    
-            if (_cliffPeriod == 0 && _vestingPeriod == 0) {
-                _mint(_partner, _totalTokensAmount);
-            }
-        }
-    }
-
-
     function createAddProposal(address _partner, uint _tokensAmount, uint _cliffPeriod, uint _vestingPeriod) public {
         require(msg.sender == founder || balanceOf(msg.sender) > 0, "Only partners or the founder can create proposals");
         require(_partner != address(0), "Invalid partner address");
 
-        AddProposal storage proposal = addProposals[nextProposalId];
-        proposal.proposalTarget = _partner;
-        proposal.tokensAmount = _tokensAmount;
-        proposal.cliffPeriod = _cliffPeriod;
-        proposal.vestingPeriod = _vestingPeriod;
-        proposal.executed = false;
+        if (partners.length == 0) {
+            require(msg.sender == founder, "Only the founder can add the first partner.");
 
-        emit AddProposalCreated(nextProposalId, _partner);
-        nextProposalId++;
+            addPartnerInternal(_partner, _tokensAmount, _cliffPeriod, _vestingPeriod);
+        } else {
+            AddProposal storage proposal = addProposals[nextProposalId];
+            proposal.proposalTarget = _partner;
+            proposal.tokensAmount = _tokensAmount;
+            proposal.cliffPeriod = _cliffPeriod;
+            proposal.vestingPeriod = _vestingPeriod;
+            proposal.executed = false;
+
+            emit AddProposalCreated(nextProposalId, _partner);
+            nextProposalId++;
+        }
     }
 
     function voteAddProposal (uint _id) public {
@@ -246,12 +229,24 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         if (totalVotesFor > totalSupply() / 2) {
             proposal.executed = true;  // Mark the proposal as executed before addition to prevent reentrancy
             // Call the function to execute addition
-            this.addPartner(proposal.proposalTarget, proposal.tokensAmount, proposal.cliffPeriod, proposal.vestingPeriod);
+            addPartnerInternal(proposal.proposalTarget, proposal.tokensAmount, proposal.cliffPeriod, proposal.vestingPeriod);
         }
     
         emit VoteCast(_id, msg.sender);
     }
 
+    function addPartnerInternal(address _partner, uint _totalTokensAmount, uint _cliffPeriod, uint _vestingPeriod) internal {
+        require(_partner != address(0), "Invalid partner address");
+        require(_totalTokensAmount > 0, "Invalid tokens amount");
+        require(_cliffPeriod <= _vestingPeriod, "Cliff period must be less than or equal to vesting period");
+
+        partners.push(_partner);
+        partnersDetails[_partner] = PartnerDetails(block.timestamp, _totalTokensAmount, 0, _cliffPeriod, _vestingPeriod);
+
+        if (_cliffPeriod == 0 && _vestingPeriod == 0) {
+            _mint(_partner, _totalTokensAmount);
+        }
+    }
 
     function getPartners() external view returns (address[] memory) {
         return partners;
@@ -284,7 +279,10 @@ contract EquityToken is ERC20Burnable, ReentrancyGuard {
         uint256 totalSupply = totalSupply();
         uint256 usdtBalance = usdcToken.balanceOf(address(this));
         uint256 withdrawAmount = (usdtBalance * balance) / totalSupply;
+        
+        require(withdrawnUSDT[msg.sender] + withdrawAmount <= usdtBalance * balance / totalSupply, "You have already withdrawn your full share");
 
+        withdrawnUSDT[msg.sender] += withdrawAmount;
         require(usdcToken.transfer(msg.sender, withdrawAmount), "USDT transfer failed");
     }
 }
