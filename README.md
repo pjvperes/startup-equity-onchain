@@ -1,7 +1,7 @@
 # Startup Equity onchain
 
 <h4 align="center">
-  <a href="https://scaffoldeth.io">Website</a>
+  <a href="https://startup-equity-2g8bgsujo-pedro-peres-projects.vercel.app/">Website</a>
 </h4>
 
 ➡️ The Startup/DAO Management DApp is a comprehensive tool designed to manage a startup or decentralized autonomous organization (DAO) with features including partner management, equity management, and proposal voting. Users can add or dismiss partners, view their equity percentage, claim yields in USDT, sell their equity, and vote on proposals for adding or dismissing partners. The DApp integrates with MetaMask for secure transactions and displays real-time data on partner equity and proposal status. This project is ideal for organizations seeking a decentralized and transparent approach to managing their governance and equity distribution.
